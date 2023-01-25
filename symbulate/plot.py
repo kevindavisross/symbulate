@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
+from matplotlib.cm import get_cmap
 from scipy.stats import gaussian_kde
 from cycler import cycler
 
@@ -67,6 +68,31 @@ def compute_density(values):
 def setup_ticks(pos, lab, ax):
     ax.set_ticks(pos)
     ax.set_ticklabels(lab)
+
+def reduce_ticks(x_shape, y_shape, ax):
+    # Plot mutating function
+    # x_shape = # of discrete x values, y_shape = # of discrete y values
+    # Use this if there is a discrete RV in the 2D sim results plot
+
+    # Here we initialize the list of ticks and their labels that we want to keep
+    xticks, xlabels, yticks, ylabels = [], [], [], []
+    # If the number of discrete x values is too much...
+    if x_shape > 20:
+        # First we get the tick labels (label) and their x location
+        for x, label in enumerate(ax.xaxis.get_ticklabels()):
+            # We filter down to 20 ticks and their labels by adding 20 evenly spaced ticks/labels to the new lists
+            if x % (x_shape // 20) == 0:
+                xticks.append(label.get_position()[0])
+                xlabels.append(str(round(float(label.get_text()))))
+        # Then we plot them
+        plt.xticks(xticks, labels=xlabels, rotation=75)
+    # Repeat for y-axis
+    if y_shape > 15:
+        for y, label in enumerate(ax.yaxis.get_ticklabels()):
+            if y % (y_shape // 15) == 0:
+                yticks.append(label.get_position()[1])
+                ylabels.append(str(round(float(label.get_text()))))
+        plt.yticks(yticks, labels=ylabels)
     
 def add_colorbar(fig, type, mappable, label):
     #create axis for cbar to place on left
@@ -105,10 +131,12 @@ def make_tile(x, y, bins, discrete_x, discrete_y, ax):
         intensity[key] = val / nums
     if not discrete_x: x_lab = np.around(x_lab, decimals=1)
     if not discrete_y: y_lab = np.around(y_lab, decimals=1)
-    hm = ax.matshow(intensity, cmap='Blues', origin='lower', aspect='auto', vmin=0)
+    hm = ax.matshow(intensity, cmap='viridis', origin='lower', aspect='auto', vmin=0)
     ax.xaxis.set_ticks_position('bottom')
     setup_ticks(x_pos, x_lab, ax.xaxis)
     setup_ticks(y_pos, y_lab, ax.yaxis)
+    reduce_ticks(x_shape, y_shape, ax)
+
     return hm
 
 def make_violin(data, positions, ax, axis, alpha):
@@ -144,7 +172,117 @@ def make_density2D(x, y, ax):
     Xgrid, Ygrid = np.meshgrid(np.linspace(xmin, xmax, 100),
                                np.linspace(ymin, ymax, 100))
     Z = density.evaluate(np.vstack([Xgrid.ravel(), Ygrid.ravel()]))
-    den = ax.imshow(Z.reshape(Xgrid.shape), origin='lower', cmap='Blues',
+    den = ax.imshow(Z.reshape(Xgrid.shape), origin='lower', cmap='viridis',
               aspect='auto', extent=[xmin, xmax, ymin, ymax]
     )
     return den
+
+
+def make_mosaic(data, ax):
+    # data is a list of [x, y] pairs
+    # Split data into x and y values
+    x, y = data[:, 0], data[:, 1]
+    # Get number of simulated values
+    data_len = len(data)
+
+    # Get unique values of y
+    y_vals = list(set(y))
+    # Get marginal distribution of y as a list, using the counts of y values
+    y_marg = [i / data_len for i in dict(sorted(count_var(y).items())).values()]
+    # Create y-coordinates for the bar chart squares based on the marginal distribution
+    y_loc, loc = [0], 0
+    for j in y_marg[:-1]:
+        loc += j
+        y_loc.append(loc)
+
+    # Get unique values of x
+    x_vals = list(set(x))
+    # Get marginal distribution of x as a list, using the counts of x values
+    x_marg = [i / data_len for i in dict(sorted(count_var(x).items())).values()]
+    # Create x-coordinates for the bar chart squares based on the marginal distribution
+    x_loc, loc = [0], 0
+    for j in x_marg[:-1]:
+        loc += j
+        x_loc.append(loc)
+    # Get number of unique values of x
+    num_x = len(x_vals)
+
+    # Initialize the matrix of counts
+    x_counts = []
+
+    # Create the matrix of counts as a list of lists
+    # Each list/"row" is a y-value, therefore each "column" is an x-value
+    for i in y_vals:
+        x_given_y = np.array([val[0] for val in data if val[1] == i])
+        x_y_count = count_var(x_given_y)
+        # Include x-values with a count of 0
+        for val in x_vals:
+            if val not in x_y_count.keys():
+                x_y_count[val] = 0
+        x_y_count = dict(sorted(x_y_count.items()))
+        x_y_values = list(x_y_count.values())
+        x_counts.append(x_y_values)
+
+    # Turn the matrix of counts into a numpy array
+    # This way, we can use numpy methods
+    count_matrix = np.array(x_counts)
+    # Get the marginal count across each "column" (each value of x)
+    y_sum = np.sum(count_matrix, axis=0)
+    # Get a matrix where each element is the conditional probability of y | x
+    y_prop_matrix = np.divide(count_matrix, y_sum)
+
+    # Get matrix of joint probabilities
+    # joint_prob_matrix = np.diag(x_marg).dot(np.transpose(y_prop_matrix))
+    # joint_prob_matrix = np.transpose(joint_prob_matrix)
+    # Get min joint prob
+    # area_min = np.min(joint_prob_matrix)
+    # Get max joint prob
+    # area_max = np.max(joint_prob_matrix)
+    # Rescale the joint probabilities so min is 0, max is 1
+    # joint_rescale = (joint_prob_matrix - area_min) / (area_max - area_min)
+
+    # Initialize whitespace, which will be used to determine the
+    #   whitespace below each square on the mosaic plot
+    #   by summing the height of each of the squares below it
+    whitespace = np.zeros(num_x)
+
+    # Create a new bar plot with a new color for each y-value.
+    # As you can see in the resulting plot, each color is actually
+    #   an individual plot that has been layered on.
+    # Each individual plot/color represents a single y-value
+    for r in range(len(y_prop_matrix)):
+        row = y_prop_matrix[r]
+        # Base the transparency on the join probability
+        # alpha_val = joint_rescale[r]
+        # Base the color on the y-value
+        color_val = y_loc[r]
+        # Create the plot
+        new_bar = plt.bar(x_loc, row, bottom=whitespace, width=x_marg,
+                          align='edge', edgecolor="white", color=get_viridis(color_val))
+        # for i in range(len(new_bar)):
+        #     new_bar[i].set_alpha(np.sqrt(alpha_val[i]))
+        #     new_bar[i].set_edgecolor("white")
+        # Add the height of the current y-values to the whitespace for the next plot
+        whitespace = whitespace + np.array(row)
+
+    plt.ylim((0, 1))
+    plt.xlim((0, 1))
+
+    # Create a new axis on the top of the plot that show the
+    #   x-values at marginal positions instead of proportions
+    axy = ax.twiny()
+    axy.set_xticks([(x_marg[i] / 2) + v for i, v in enumerate(x_loc)])
+    axy.set_xticklabels(x_vals)
+
+    # Create a new axis at the right of the plot that shows the
+    #   y-values at marginal positions instead of proportions
+    axx = ax.twinx()
+    axx.set_yticks([(y_marg[i] / 2) + v for i, v in enumerate(y_loc)])
+    axx.set_yticklabels(y_vals)
+
+
+def get_viridis(prop):
+    cmap = get_cmap('viridis')
+    rgba = cmap(prop)
+    return colors.rgb2hex(rgba)
+

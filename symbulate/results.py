@@ -19,7 +19,8 @@ from .base import (Arithmetic, Statistical, Comparable,
 from .plot import (configure_axes, init_color, get_next_color, is_discrete,
                    count_var, compute_density, add_colorbar,
                    setup_ticks, make_tile, make_violin,
-                   make_marginal_impulse, make_density2D)
+                   make_marginal_impulse, make_density2D,
+                   make_mosaic)
 from .result import (Scalar, Vector, TimeFunction,
                      is_number, is_numeric_vector)
 from .table import Table
@@ -566,7 +567,13 @@ class RVResults(Results):
                     y = y + np.random.normal(loc=0, scale=.01 * (y.max() - y.min()), size=len(y))
                 ax.scatter(x, y, alpha=alpha, c=color, **kwargs)
             elif 'hist' in type:
-                histo = ax.hist2d(x, y, bins=bins, cmap='Blues')
+                x_len = len(x_height) - 1
+                y_len = len(y_height) - 1
+                if discrete_x and x_len < bins:
+                    bins = [x_len, y_len] if (discrete_y and y_len < bins) else [x_len, 30]
+                elif discrete_y and y_len < bins:
+                    bins = [30, y_len]
+                histo = ax.hist2d(x, y, bins=bins, cmap='viridis')
 
                 # When normalize=True, use density instead of counts
                 if normalize:
@@ -576,6 +583,7 @@ class RVResults(Results):
                     new_labels = []
                     for label in caxes.get_yticklabels():
                         new_labels.append(int(label.get_text()) / len(x))
+                    caxes.set_yticks(caxes.get_yticks().tolist())
                     caxes.set_yticklabels(new_labels)
                 else:
                     caxes = add_colorbar(fig, type, histo[3], 'Count')
@@ -592,6 +600,9 @@ class RVResults(Results):
                 elif not discrete_x and discrete_y:
                     positions = sorted(list(y_count.keys()))
                     make_violin(self.array, positions, ax, 'y', alpha)
+            elif 'mosaic' in type:
+                if discrete_x and discrete_y:
+                    make_mosaic(self.array, ax)
         else:
             if alpha is None:
                 alpha = np.log(2) / np.log(len(self) + 1)
