@@ -10,7 +10,7 @@ from .result import Scalar, Vector, InfiniteVector
 class Distribution(ProbabilitySpace):
     def __init__(self, params, scipy, discrete=True):
         self.params = params
-
+        self.scipy = scipy
         self.discrete = discrete
 
         if discrete:
@@ -19,7 +19,7 @@ class Distribution(ProbabilitySpace):
         else:
             self.pdf = lambda x: scipy.pdf(x, **self.params)
 
-        self.cdf = lambda x: scipy.cdf(x, **self.params)
+        # self.cdf = lambda x: scipy.cdf(x, **self.params)
         self.quantile = lambda x: scipy.ppf(x, **self.params)
 
         self.median = lambda: scipy.median(**self.params)
@@ -97,6 +97,41 @@ class Distribution(ProbabilitySpace):
         # adjust the axes, base x-axis at 0
         ax.spines["bottom"].set_position("zero")
 
+    def cdf(self, x, plot=False):
+        scipy = self.scipy
+
+        if plot:
+            # Get xlims
+            xlim = self.xlim
+            # Initialize plot
+            fig, ax = plt.subplots()
+
+            # Continuous cdf returns plot of area under curve
+            if not self.discrete:
+                xs = np.linspace(xlim[0], xlim[1], 200)
+                ys = self.pdf(xs)
+                x_shaded = np.linspace(xlim[0], x, 200)
+                y_shaded = self.pdf(x_shaded)
+                ax.fill_between(x_shaded, y_shaded, alpha=0.5, color="orange")
+            # Discrete cdf returns impulse plot of densities to sum over
+            else:
+                xs = np.arange(int(xlim[0]), int(xlim[1]) + 1)
+                ys = self.pdf(xs)
+                x_shaded = np.array([i for i in xs if i <= x])
+                y_shaded = self.pdf(x_shaded)
+                ax.scatter(xs, ys, s=40)
+                ax.vlines(x_shaded, 0, y_shaded, color="orange")
+
+            # Formatting fixes for consistency with plot method
+            ymin, ymax = ys[np.isfinite(ys)].min(), ys[np.isfinite(ys)].max()
+            ylim = min(0, ymin - 0.05 * (ymax - ymin)), 1.05 * ymax
+            ax.set_xlim(*xlim)
+            ax.set_ylim(*ylim)
+            ax.plot(xs, ys)
+            ax.spines["bottom"].set_position("zero")
+
+        # Return value of cdf evalated at x
+        return scipy.cdf(x, **self.params)
 
 ## Discrete Distributions
 

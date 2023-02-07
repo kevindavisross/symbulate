@@ -1,7 +1,6 @@
 import numpy as np
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
-from matplotlib.cm import get_cmap
 from scipy.stats import gaussian_kde
 from cycler import cycler
 
@@ -177,7 +176,6 @@ def make_density2D(x, y, ax):
     )
     return den
 
-
 def make_mosaic(data, ax):
     # data is a list of [x, y] pairs
     # Split data into x and y values
@@ -194,6 +192,9 @@ def make_mosaic(data, ax):
     for j in y_marg[:-1]:
         loc += j
         y_loc.append(loc)
+
+    # Create a vector to map color values to support by rescaling btwn 0 to 1
+    y_colors = [(i - min(y_vals)) / (max(y_vals) - min(y_vals)) for i in y_vals]
 
     # Get unique values of x
     x_vals = list(set(x))
@@ -231,15 +232,6 @@ def make_mosaic(data, ax):
     # Get a matrix where each element is the conditional probability of y | x
     y_prop_matrix = np.divide(count_matrix, y_sum)
 
-    # Get matrix of joint probabilities
-    # joint_prob_matrix = np.diag(x_marg).dot(np.transpose(y_prop_matrix))
-    # joint_prob_matrix = np.transpose(joint_prob_matrix)
-    # Get min joint prob
-    # area_min = np.min(joint_prob_matrix)
-    # Get max joint prob
-    # area_max = np.max(joint_prob_matrix)
-    # Rescale the joint probabilities so min is 0, max is 1
-    # joint_rescale = (joint_prob_matrix - area_min) / (area_max - area_min)
 
     # Initialize whitespace, which will be used to determine the
     #   whitespace below each square on the mosaic plot
@@ -252,16 +244,11 @@ def make_mosaic(data, ax):
     # Each individual plot/color represents a single y-value
     for r in range(len(y_prop_matrix)):
         row = y_prop_matrix[r]
-        # Base the transparency on the join probability
-        # alpha_val = joint_rescale[r]
         # Base the color on the y-value
-        color_val = y_loc[r]
+        color_val = y_colors[r]
         # Create the plot
-        new_bar = plt.bar(x_loc, row, bottom=whitespace, width=x_marg,
-                          align='edge', edgecolor="white", color=get_viridis(color_val))
-        # for i in range(len(new_bar)):
-        #     new_bar[i].set_alpha(np.sqrt(alpha_val[i]))
-        #     new_bar[i].set_edgecolor("white")
+        plt.bar(x_loc, row, bottom=whitespace, width=x_marg,
+                align='edge', edgecolor="white", color=get_viridis(color_val))
         # Add the height of the current y-values to the whitespace for the next plot
         whitespace = whitespace + np.array(row)
 
@@ -270,19 +257,52 @@ def make_mosaic(data, ax):
 
     # Create a new axis on the top of the plot that show the
     #   x-values at marginal positions instead of proportions
-    axy = ax.twiny()
-    axy.set_xticks([(x_marg[i] / 2) + v for i, v in enumerate(x_loc)])
-    axy.set_xticklabels(x_vals)
+    # axy = ax.twiny()
+    ax.set_xticks([(x_marg[i] / 2) + v for i, v in enumerate(x_loc)])
+    ax.set_xticklabels(x_vals)
+    ax.twiny()
+
+def make_mosaic_marginal(data, ax):
+    y = data[:, 1]
+    # Get number of simulated values
+    data_len = len(data)
+
+    # Get unique values of y
+    y_vals = list(set(y))
+    # Get marginal distribution of y as a list, using the counts of y values
+    y_marg = [i / data_len for i in dict(sorted(count_var(y).items())).values()]
+    # Create y-coordinates for the bar chart squares based on the marginal distribution
+    y_loc, loc = [0], 0
+    for j in y_marg[:-1]:
+        loc += j
+        y_loc.append(loc)
+
+    y_colors = [(i - min(y_vals)) / (max(y_vals) - min(y_vals)) for i in y_vals]
+
+    whitespace = 0
+
+    for r in range(len(y_marg)):
+        row = y_marg[r]
+        # Base the color on the y-value
+        color_val = y_colors[r]
+        # Create the plot
+        plt.bar(0, row, bottom=whitespace, width=1,
+                align='edge', edgecolor="white", color=get_viridis(color_val))
+        # Add the height of the current y-values to the whitespace for the next plot
+        whitespace = whitespace + row
+
+    plt.ylim((0, 1))
+    ax.set_xticks([0, 1])
+    ax.set_xticklabels(['', ''])
 
     # Create a new axis at the right of the plot that shows the
-    #   y-values at marginal positions instead of proportions
-    axx = ax.twinx()
-    axx.set_yticks([(y_marg[i] / 2) + v for i, v in enumerate(y_loc)])
-    axx.set_yticklabels(y_vals)
-
+    #   y-values at marginal positions
+    ax.set_yticks([(y_marg[i] / 2) + v for i, v in enumerate(y_loc)])
+    ax.set_yticklabels(y_vals)
+    ax.yaxis.tick_right()
 
 def get_viridis(prop):
-    cmap = get_cmap('viridis')
+    cmap = plt.get_cmap('viridis')
     rgba = cmap(prop)
     return colors.rgb2hex(rgba)
 

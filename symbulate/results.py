@@ -20,7 +20,7 @@ from .plot import (configure_axes, init_color, get_next_color, is_discrete,
                    count_var, compute_density, add_colorbar,
                    setup_ticks, make_tile, make_violin,
                    make_marginal_impulse, make_density2D,
-                   make_mosaic)
+                   make_mosaic, make_mosaic_marginal)
 from .result import (Scalar, Vector, TimeFunction,
                      is_number, is_numeric_vector)
 from .table import Table
@@ -554,7 +554,7 @@ class RVResults(Results):
                                        alpha=alpha, bins=bins, orientation='horizontal')
                 plt.setp(ax_marg_x.get_xticklabels(), visible=False)
                 plt.setp(ax_marg_y.get_yticklabels(), visible=False)
-            else:
+            elif "mosaic" not in type:
                 fig = plt.gcf()
                 ax = plt.gca()
                 color = get_next_color(ax)
@@ -602,7 +602,16 @@ class RVResults(Results):
                     make_violin(self.array, positions, ax, 'y', alpha)
             elif 'mosaic' in type:
                 if discrete_x and discrete_y:
+                    fig = plt.figure()
+                    gs = GridSpec(5, 15)
+                    ax = fig.add_subplot(gs[0:5, 0:13])
                     make_mosaic(self.array, ax)
+                    ax_marg = fig.add_subplot(gs[0:5, 14:15])
+                    make_mosaic_marginal(self.array, ax_marg)
+
+                elif not discrete_x or not discrete_y:
+                    raise Exception("Mosaic plots can only be made "
+                                    "for 2 discrete random variables.")
         else:
             if alpha is None:
                 alpha = np.log(2) / np.log(len(self) + 1)
