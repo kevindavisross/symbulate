@@ -505,6 +505,15 @@ class RVResults(Results):
                 ax.plot(xs, [0.001] * n, '|', linewidth=5, color='k')
                 if len(type) == 1:
                     setup_ticks([], [], ax.yaxis)
+            if 'ecdf' in type:
+                xs = self.array
+                count_dict = dict(sorted(count_var(xs).items()))
+                counts = np.cumsum([i / len(xs) for i in count_dict.values()])
+                vals = list(count_dict.keys())
+                plt.plot(vals, counts, drawstyle='steps-post',
+                         color=color, alpha=alpha, **kwargs)
+                ax.set_xlim(min(vals), max(vals))
+                ax.set_ylim(0, max(counts))
         elif self.dim == 2:
             # make sure self.array, a Numpy array, has been set
             self._set_array()
