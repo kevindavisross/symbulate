@@ -33,6 +33,8 @@ class Distribution(ProbabilitySpace):
             scipy.ppf(0.999, **self.params)
             )
 
+        self.plotted = False
+
     def draw(self):
         return Scalar(self.sim_func(**self.params))
 
@@ -49,7 +51,7 @@ class Distribution(ProbabilitySpace):
                 return Vector(self.sim_func(**self.params, size=exponent))
         return ProbabilitySpace(draw)
 
-    def plot(self, xlim=None, alpha=None, ax=None, **kwargs):
+    def plot(self, xlim=None, alpha=None, ax=None, cdf=False, **kwargs):
 
         # use distribution defaults for xlim if none set
         if xlim is None:
@@ -60,7 +62,11 @@ class Distribution(ProbabilitySpace):
             xs = np.arange(int(xlim[0]), int(xlim[1]) + 1)
         else:
             xs = np.linspace(xlim[0], xlim[1], 200)
-        ys = self.pdf(xs)
+
+        if cdf:
+            ys = self.cdf(xs)
+        else:
+            ys = self.pdf(xs)
 
         # determine limits for y-axes based on y values
         ymin, ymax = ys[np.isfinite(ys)].min(), ys[np.isfinite(ys)].max()
@@ -88,15 +94,75 @@ class Distribution(ProbabilitySpace):
         color = get_next_color(ax)
 
         # plot points for discrete distributions
-        if self.discrete:
+        if self.discrete and not cdf:
             ax.scatter(xs, ys, s=40, color=color, alpha=alpha, **kwargs)
 
         # plot curve
-        ax.plot(xs, ys, color=color, alpha=alpha, **kwargs)
+        if not (cdf and self.discrete):
+            ax.plot(xs, ys, color=color, alpha=alpha, **kwargs)
+        else:
+            # plt.step(xs, ys, where='post', color=color, alpha=alpha, **kwargs)
+            plt.plot(xs, ys, drawstyle='steps-post',
+                     color=color, alpha=alpha, **kwargs)
 
         # adjust the axes, base x-axis at 0
         ax.spines["bottom"].set_position("zero")
 
+        self.plotted = not cdf
+        return self
+
+    def shade(self, lt=None, le=None, gt=None, ge=None):
+        if not self.plotted:
+            self.plot()
+        ax = plt.gca()
+        xlim = self.xlim
+
+        lo = xlim[0]
+        hi = xlim[1]
+        hi_incl = False
+        lo_incl = False
+
+        if lt is not None:
+            if le is not None:
+                raise Exception("Please specify either lt or le, not both.")
+            hi = lt
+        elif le is not None:
+            hi = le
+            hi_incl = True
+
+        if gt is not None:
+            if ge is not None:
+                raise Exception("Please specify either gt or ge, not both.")
+            lo = gt
+        elif ge is not None:
+            lo = ge
+            lo_incl = True
+
+        if hi <= lo:
+            raise Exception("Parameter gt or ge must be strictly less than parameter lt or le.")
+
+        if not self.discrete:
+            x_shaded = np.linspace(lo, hi, 200)
+            y_shaded = self.pdf(x_shaded)
+            ax.fill_between(x_shaded, y_shaded, alpha=0.5, color="grey")
+            if hi_incl:
+                ax.vlines(hi, 0, self.pdf(hi), color="grey")
+            if lo_incl:
+                ax.vlines(lo, 0, self.pdf(lo), color="grey")
+        else:
+            xs = np.arange(int(xlim[0]), int(xlim[1]) + 1)
+            if hi_incl and lo_incl:
+                x_shaded = np.array([i for i in xs if lo <= i <= hi])
+            elif hi_incl:
+                x_shaded = np.array([i for i in xs if lo < i <= hi])
+            elif lo_incl:
+                x_shaded = np.array([i for i in xs if lo <= i < hi])
+            else:
+                x_shaded = np.array([i for i in xs if lo < i < hi])
+            y_shaded = self.pdf(x_shaded)
+            ax.vlines(x_shaded, 0, y_shaded, color="grey")
+
+        return self
 
 ## Discrete Distributions
 

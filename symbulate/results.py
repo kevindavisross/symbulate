@@ -20,7 +20,8 @@ from .base import (Arithmetic, Statistical, Comparable,
 from .plot import (configure_axes, init_color, get_next_color, is_discrete,
                    count_var, compute_density, add_colorbar,
                    setup_ticks, make_tile, make_violin,
-                   make_marginal_impulse, make_density2D)
+                   make_marginal_impulse, make_density2D,
+                   make_mosaic, make_mosaic_marginal)
 from .result import (Scalar, Vector, TimeFunction,
                      is_number, is_numeric_vector)
 from .table import Table
@@ -513,6 +514,15 @@ class RVResults(Results):
                 ax.plot(xs, [0.001] * n, '|', linewidth=5, color='k')
                 if len(type) == 1:
                     setup_ticks([], [], ax.yaxis)
+            if 'ecdf' in type:
+                xs = self.array
+                count_dict = dict(sorted(count_var(xs).items()))
+                counts = np.cumsum([i / len(xs) for i in count_dict.values()])
+                vals = list(count_dict.keys())
+                plt.plot(vals, counts, drawstyle='steps-post',
+                         color=color, alpha=alpha, **kwargs)
+                ax.set_xlim(min(vals), max(vals))
+                ax.set_ylim(0, max(counts))
         elif self.dim == 2:
             # make sure self.array, a Numpy array, has been set
             self._set_array()
@@ -562,7 +572,7 @@ class RVResults(Results):
                                        alpha=alpha, bins=bins, orientation='horizontal')
                 plt.setp(ax_marg_x.get_xticklabels(), visible=False)
                 plt.setp(ax_marg_y.get_yticklabels(), visible=False)
-            else:
+            elif "mosaic" not in type:
                 fig = plt.gcf()
                 ax = plt.gca()
                 color = get_next_color(ax)
@@ -575,7 +585,13 @@ class RVResults(Results):
                     y = y + np.random.normal(loc=0, scale=.01 * (y.max() - y.min()), size=len(y))
                 ax.scatter(x, y, alpha=alpha, c=color, **kwargs)
             elif 'hist' in type:
-                histo = ax.hist2d(x, y, bins=bins, cmap='Blues')
+                x_len = len(x_height) - 1
+                y_len = len(y_height) - 1
+                if discrete_x and x_len < bins:
+                    bins = [x_len, y_len] if (discrete_y and y_len < bins) else [x_len, 30]
+                elif discrete_y and y_len < bins:
+                    bins = [30, y_len]
+                histo = ax.hist2d(x, y, bins=bins, cmap='viridis')
 
                 # When normalize=True, use density instead of counts
                 if normalize:
@@ -585,6 +601,7 @@ class RVResults(Results):
                     new_labels = []
                     for label in caxes.get_yticklabels():
                         new_labels.append(int(label.get_text()) / len(x))
+                    caxes.set_yticks(caxes.get_yticks().tolist())
                     caxes.set_yticklabels(new_labels)
                 else:
                     caxes = add_colorbar(fig, type, histo[3], 'Count')
@@ -601,6 +618,18 @@ class RVResults(Results):
                 elif not discrete_x and discrete_y:
                     positions = sorted(list(y_count.keys()))
                     make_violin(self.array, positions, ax, 'y', alpha)
+            elif 'mosaic' in type:
+                if discrete_x and discrete_y:
+                    fig = plt.figure()
+                    gs = GridSpec(5, 15)
+                    ax = fig.add_subplot(gs[0:5, 0:13])
+                    make_mosaic(self.array, ax)
+                    ax_marg = fig.add_subplot(gs[0:5, 14:15])
+                    make_mosaic_marginal(self.array, ax_marg)
+
+                elif not discrete_x or not discrete_y:
+                    raise Exception("Mosaic plots can only be made "
+                                    "for 2 discrete random variables.")
         else:
             if alpha is None:
                 alpha = np.log(2) / np.log(len(self) + 1)
