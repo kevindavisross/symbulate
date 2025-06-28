@@ -1,6 +1,8 @@
 import numpy as np
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
+import matplotlib.colormaps as cm
+import itertools
 from scipy.stats import gaussian_kde
 from cycler import cycler
 
@@ -16,14 +18,14 @@ color_index=0
 color_cycle = [c['color'] for c in plt.rcParams['axes.prop_cycle']]
 
 def init_color():
-    hex_list = [colors.rgb2hex(rgb) for rgb in plt.cm.get_cmap('tab10').colors]
+    hex_list = [colors.rgb2hex(rgb) for rgb in cm.get_cmap('tab10').colors]
     plt.rcParams["axes.prop_cycle"] = cycler('color', hex_list)
 
-def get_next_color():
-    global color_index
-    color = color_cycle[color_index]
-    color_index = (color_index + 1) % len(color_cycle)
-    return color
+def get_next_color(axes):
+    if not hasattr(axes, "_color_cycle"):
+        prop_cycle = plt.rcParams['axes.prop_cycle']
+        axes._color_cycle = itertools.cycle(prop_cycle.by_key()['color'])
+    return next(axes._color_cycle)
 
 def configure_axes(axes, xdata, ydata, xlabel = None, ylabel = None):
     # Create 5% buffer on either end of plot so that leftmost and rightmost
