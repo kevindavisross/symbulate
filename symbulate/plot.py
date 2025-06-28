@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
-import matplotlib.colormaps as cm
+from matplotlib import colormaps as cm
 import itertools
 from scipy.stats import gaussian_kde
 from cycler import cycler
